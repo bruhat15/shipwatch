@@ -24,3 +24,8 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Agent/AI Artifacts
+PLAN.md
+task.md
+copliot's history
