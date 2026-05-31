@@ -342,7 +342,7 @@ async def github_callback(
         target_user_id=connect_user_id,
     )
 
-    access_jwt = _create_access_token(user["id"])
+    access_jwt = _create_access_token(user)
     return _redirect_with_token(access_jwt, redirect_path)
 
 
@@ -481,7 +481,7 @@ async def google_callback(
         target_user_id=connect_user_id,
     )
 
-    access_jwt = _create_access_token(user["id"])
+    access_jwt = _create_access_token(user)
     return _redirect_with_token(access_jwt, redirect_path)
 
 
