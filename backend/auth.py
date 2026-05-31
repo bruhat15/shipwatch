@@ -3,6 +3,7 @@ ShipWatch Auth - OAuth (GitHub, Google) + JWT utilities.
 """
 
 import os
+import secrets
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
@@ -10,7 +11,9 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from jose import JWTError, jwt
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
+
+from services.contact_email import send_magic_link
 
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", "72"))
@@ -500,3 +503,51 @@ def _redirect_with_error(message: str, redirect_path: str | None = None) -> Redi
     redirect_path = _sanitize_redirect(redirect_path)
     params = urlencode({"error": message, "redirect": redirect_path})
     return RedirectResponse(f"{_frontend_url()}/auth/callback?{params}")
+
+
+class EmailRequest(BaseModel):
+    email: str
+    redirect_path: str = "/dashboard"
+
+@auth_router.post("/email/request")
+async def email_request(req: EmailRequest, request: Request):
+    store = await _get_store(request)
+    import secrets
+    token = secrets.token_urlsafe(32)
+    expires_at = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
+    
+    await store.create_magic_link(
+        token=token,
+        email=req.email,
+        expires_at=expires_at,
+        redirect_path=req.redirect_path
+    )
+    
+    from services.contact_email import send_magic_link
+    send_magic_link(req.email, token, req.redirect_path)
+    return {"status": "ok"}
+
+
+@auth_router.get("/email/verify")
+async def email_verify(request: Request, token: str, redirect: str | None = None):
+    store = await _get_store(request)
+    link_data = await store.consume_magic_link(token)
+    
+    redirect_path = _sanitize_redirect(redirect)
+    
+    if not link_data:
+        return _redirect_with_error("Invalid or expired magic link", redirect_path)
+        
+    expires_at = datetime.fromisoformat(link_data["expires_at"])
+    if datetime.now(timezone.utc) > expires_at:
+        return _redirect_with_error("Magic link has expired", redirect_path)
+        
+    email = link_data["email"]
+    link_redirect = link_data.get("redirect_path") or redirect_path
+    
+    # Get or create the user strictly by email
+    user_id = await store.get_or_create_user_by_email(email)
+    
+    access_jwt = _create_access_token(user_id)
+    return _redirect_with_token(access_jwt, link_redirect)
+

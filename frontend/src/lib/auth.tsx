@@ -23,6 +23,7 @@ interface AuthContextValue {
   connect: (provider: "github" | "google", redirectPath?: string) => void;
   logout: () => void;
   setToken: (token: string | null) => void;
+  requestMagicLink: (email: string, redirectPath?: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -129,6 +130,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
+  const requestMagicLink = async (email: string, redirectPath: string = "/dashboard") => {
+    const res = await fetch(`${API_BASE}/api/auth/email/request`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, redirect_path: redirectPath }),
+    });
+    if (!res.ok) {
+      throw new Error("Failed to request magic link");
+    }
+  };
+
   const value = useMemo(
     () => ({
       user,
@@ -139,6 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       connect,
       logout,
       setToken,
+      requestMagicLink,
     }),
     [user, isLoading, token]
   );

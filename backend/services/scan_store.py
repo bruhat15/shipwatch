@@ -46,6 +46,15 @@ class ScanStore:
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        await self.db.execute("""
+            CREATE TABLE IF NOT EXISTS magic_links (
+                token TEXT PRIMARY KEY,
+                email TEXT NOT NULL,
+                expires_at TIMESTAMP NOT NULL,
+                redirect_path TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         await self._ensure_scan_columns()
         await self.db.commit()
 
@@ -395,10 +404,38 @@ class ScanStore:
                 )
 
         await self.db.commit()
-        user = await self.get_user(user_id)
-        if not user:
-            raise ValueError("Failed to load user after upsert")
-        return user
+        return user_id
+
+    async def get_or_create_user_by_email(self, email: str, name: str = None) -> str:
+        async with self.db.execute("SELECT id FROM users WHERE email = ?", (email,)) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return row[0]
+        
+        u_id = str(uuid.uuid4())
+        await self.db.execute(
+            "INSERT INTO users (id, email, name) VALUES (?, ?, ?)",
+            (u_id, email, name)
+        )
+        await self.db.commit()
+        return u_id
+
+    async def get_user_by_id(self, user_id: str) -> dict | None:
+        async with self.db.execute(
+            "SELECT id, email, name, avatar_url, github_id, google_id FROM users WHERE id = ?",
+            (user_id,),
+        ) as cursor:
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            return {
+                "id": row[0],
+                "email": row[1],
+                "name": row[2],
+                "avatar_url": row[3],
+                "github_id": row[4],
+                "google_id": row[5],
+            }
 
     async def get_user(self, user_id: str) -> dict | None:
         async with self.db.execute(
@@ -431,6 +468,29 @@ class ScanStore:
             if not row:
                 return None
             return row[0]
+
+    async def create_magic_link(self, token: str, email: str, expires_at: str, redirect_path: str):
+        await self.db.execute(
+            "INSERT INTO magic_links (token, email, expires_at, redirect_path) VALUES (?, ?, ?, ?)",
+            (token, email, expires_at, redirect_path)
+        )
+        await self.db.commit()
+
+    async def consume_magic_link(self, token: str) -> dict | None:
+        async with self.db.execute("SELECT email, expires_at, redirect_path FROM magic_links WHERE token = ?", (token,)) as cursor:
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            
+            # Delete the token immediately so it can't be reused
+            await self.db.execute("DELETE FROM magic_links WHERE token = ?", (token,))
+            await self.db.commit()
+
+            return {
+                "email": row[0],
+                "expires_at": row[1],
+                "redirect_path": row[2]
+            }
 
     async def _ensure_scan_columns(self) -> None:
         async with self.db.execute("PRAGMA table_info(scans)") as cursor:
