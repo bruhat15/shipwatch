@@ -1,0 +1,91 @@
+name: ShipWatch Supply Chain Audit
+
+on:
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - 'yarn.lock'
+      - 'pnpm-lock.yaml'
+  push:
+    branches: [main, master]
+
+jobs:
+  shipwatch:
+    name: ShipWatch Dependency Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run ShipWatch Supply Chain Audit
+        env:
+          SHIPWATCH_API: ${{ secrets.SHIPWATCH_API_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Optional: set max allowed critical packages before failing (default 0)
+          MAX_CRITICAL: ${{ vars.SHIPWATCH_MAX_CRITICAL || '0' }}
+        run: |
+          set -e
+          REPO_URL="https://github.com/${{ github.repository }}"
+          
+          echo "🔍 Starting ShipWatch scan for $REPO_URL"
+          
+          # Start scan
+          SCAN_RESPONSE=$(curl -s -f -X POST "$SHIPWATCH_API/api/scan" \
+            -H "Content-Type: application/json" \
+            -d "{\"repo_url\": \"$REPO_URL\"}")
+          
+          SCAN_ID=$(echo "$SCAN_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['scan_id'])")
+          echo "Scan ID: $SCAN_ID"
+          
+          # Poll until complete (max 5 minutes)
+          MAX_POLLS=60
+          for i in $(seq 1 $MAX_POLLS); do
+            sleep 5
+            STATUS_RESP=$(curl -s "$SHIPWATCH_API/api/results/$SCAN_ID")
+            STATUS=$(echo "$STATUS_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))")
+            echo "  Status: $STATUS ($i/$MAX_POLLS)"
+            if [ "$STATUS" = "complete" ]; then
+              break
+            fi
+            if [ "$STATUS" = "error" ]; then
+              echo "::error::ShipWatch scan failed"
+              exit 1
+            fi
+          done
+          
+          # Fetch final results
+          RESULT=$(curl -s "$SHIPWATCH_API/api/results/$SCAN_ID")
+          
+          CRITICAL=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('critical_count',0))")
+          WARNING=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('warning_count',0))")
+          HEALTHY=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('healthy_count',0))")
+          TOTAL=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('total_deps',0))")
+          SCORE=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('overall_score',0))")
+          
+          # Write step summary
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          ## 🔐 ShipWatch Supply Chain Audit Results
+          
+          | Metric | Value |
+          |--------|-------|
+          | **Overall Risk Score** | ${SCORE}/10 |
+          | **Total Dependencies** | $TOTAL |
+          | 🔴 Critical | $CRITICAL |
+          | 🟡 Warning | $WARNING |
+          | 🟢 Healthy | $HEALTHY |
+          
+          [View Full Report]($SHIPWATCH_API/../scan/$SCAN_ID)
+          EOF
+          
+          echo "Overall score: $SCORE/10 | Critical: $CRITICAL | Warning: $WARNING | Healthy: $HEALTHY"
+          
+          # Fail if critical packages exceed threshold
+          if [ "$CRITICAL" -gt "$MAX_CRITICAL" ]; then
+            echo "::error::ShipWatch found $CRITICAL critical dependency/dependencies (threshold: $MAX_CRITICAL)"
+            echo "::error::View full report at $SHIPWATCH_API/../scan/$SCAN_ID"
+            exit 1
+          fi
+          
+          echo "✅ ShipWatch audit passed"
