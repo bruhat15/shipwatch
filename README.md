@@ -1,5 +1,7 @@
 # ShipWatch
 
+![Landing Page](assets/landing-page.png)
+
 **Open-source supply chain intelligence that helps developers and security teams understand which dependency risks actually matter and what to do next.**
 
 Modern applications pull in hundreds of dependencies. Traditional scanners flag everything, leaving teams drowning in CVE noise with no clear path forward. ShipWatch combines vulnerability data, exploitation intelligence, and ecosystem health signals to answer three questions:
