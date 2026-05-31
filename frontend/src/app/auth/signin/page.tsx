@@ -1,9 +1,10 @@
 "use client";
 
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 
-export default function SignInPage() {
+function SignInContent() {
   const { login } = useAuth();
   const searchParams = useSearchParams();
   const redirectPath = searchParams.get("redirect") || "/dashboard";
@@ -46,5 +47,20 @@ export default function SignInPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-grid-soft dark:bg-grid flex items-center justify-center px-4">
+        <div className="w-full max-w-md glass-card p-6 text-center">
+          <div className="w-10 h-10 rounded-full border-2 border-teal-500/40 border-t-teal-500 animate-spin mx-auto mb-4" />
+          <h1 className="text-xl font-semibold mb-2 text-slate-900 dark:text-neutral-100">Loading...</h1>
+        </div>
+      </div>
+    }>
+      <SignInContent />
+    </Suspense>
   );
 }
