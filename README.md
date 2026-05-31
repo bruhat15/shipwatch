@@ -507,22 +507,7 @@ git push
 # 10. ShipWatch re-scans, PR check passes ✅
 ```
 
----
 
-## Screenshots
-
-> **Note**: Add screenshots here before final submission
-
-- [ ] Landing page hero section
-- [ ] Live scan streaming (packages appearing in real-time)
-- [ ] Scan results dashboard with decision summary
-- [ ] Fix card with copy-paste upgrade command
-- [ ] Remediation checklist with progress bar
-- [ ] GitHub issue auto-generated from scan
-- [ ] MCP query in Claude Code
-- [ ] CI/CD gate failing a PR
-
----
 
 ## Roadmap
 
