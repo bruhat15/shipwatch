@@ -1,0 +1,78 @@
+name: epss
+version: 0.1.0
+dsl_version: 3
+backend: http
+description: >-
+  FIRST.org Exploit Prediction Scoring System (EPSS) — daily ML-based predictions
+  of the probability that a CVE will be exploited in the next 30 days.
+  Updated daily. Scores range from 0.0 (very unlikely) to 1.0 (near-certain).
+  Use alongside CVSS: CVSS tells you severity, EPSS tells you exploitation likelihood.
+  A CVSS 9.8 with EPSS 0.001 is often less urgent than a CVSS 6.5 with EPSS 0.87.
+base_url: https://api.first.org
+request_headers:
+  - name: Accept
+    from: literal
+    value: application/json
+tables:
+  - name: scores
+    description: >-
+      EPSS exploitation probability score and percentile rank for one or more CVE identifiers.
+      Supports batch queries — pass multiple CVE IDs as comma-separated values.
+      Returns one row per CVE. CVEs not scored by EPSS are omitted from results.
+    filters:
+      - name: cve
+        required: true
+        description: >-
+          CVE identifier or comma-separated list.
+          Example single: "CVE-2021-44228"
+          Example batch:  "CVE-2021-44228,CVE-2024-29415,CVE-2022-25883"
+    request:
+      method: GET
+      path: /data/v1/epss
+      query:
+        - name: cve
+          from: filter
+          key: cve
+    response:
+      rows_path: [data]
+      row_strategy: direct
+    columns:
+      - name: cve
+        type: Utf8
+        nullable: false
+        description: CVE identifier (e.g. "CVE-2021-44228").
+        expr:
+          kind: path
+          path: [cve]
+
+      - name: epss
+        type: Float64
+        nullable: false
+        description: >-
+          Exploitation probability within the next 30 days (0.0–1.0).
+          Higher = more likely to be exploited. Updated daily.
+        expr:
+          kind: path
+          path: [epss]
+
+      - name: percentile
+        type: Float64
+        nullable: false
+        description: >-
+          Percentile rank among all CVEs scored by EPSS.
+          0.999 means riskier than 99.9% of all known CVEs.
+        expr:
+          kind: path
+          path: [percentile]
+
+      - name: date
+        type: Utf8
+        nullable: false
+        description: Date the EPSS model produced this score (ISO 8601).
+        expr:
+          kind: path
+          path: [date]
+
+test_queries:
+  - "SELECT cve, epss, percentile FROM epss.scores WHERE cve = 'CVE-2021-44228'"
+  - "SELECT cve, epss, percentile FROM epss.scores WHERE cve = 'CVE-2021-44228,CVE-2024-29415,CVE-2022-25883' ORDER BY epss DESC"

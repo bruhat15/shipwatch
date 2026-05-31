@@ -1,0 +1,148 @@
+name: osv
+version: 0.1.0
+dsl_version: 3
+backend: http
+description: >-
+  Query the OSV (Open Source Vulnerabilities) database for package
+  vulnerabilities across ecosystems.
+base_url: https://api.osv.dev
+request_headers:
+  - name: Accept
+    from: literal
+    value: application/json
+test_queries:
+  - SELECT id, summary, severity, published FROM osv.vulnerabilities WHERE package_name = 'lodash' AND ecosystem = 'npm' LIMIT 5
+tables:
+  - name: vulnerabilities
+    description: >-
+      Vulnerability records returned by POST /v1/query. Requires
+      package_name and ecosystem; version is optional.
+    filters:
+      - name: package_name
+        required: true
+      - name: ecosystem
+        required: true
+      - name: version
+        required: false
+    request:
+      method: POST
+      path: /v1/query
+      body:
+        - path: [package, name]
+          from: filter
+          key: package_name
+        - path: [package, ecosystem]
+          from: filter
+          key: ecosystem
+        - path: [version]
+          from: filter
+          key: version
+    response:
+      rows_path: [vulns]
+      row_strategy: direct
+    pagination:
+      mode: cursor_body
+      cursor_body_path: [pageToken]
+      response_cursor_path: [nextPageToken]
+      max_pages: 20
+    columns:
+      - name: id
+        type: Utf8
+        nullable: false
+        description: OSV vulnerability identifier.
+        expr:
+          kind: path
+          path: [id]
+      - name: summary
+        type: Utf8
+        nullable: true
+        description: Short one-line vulnerability summary.
+        expr:
+          kind: path
+          path: [summary]
+      - name: details
+        type: Utf8
+        nullable: true
+        description: Detailed vulnerability description.
+        expr:
+          kind: path
+          path: [details]
+      - name: severity
+        type: Utf8
+        nullable: true
+        description: Severity from database_specific.severity when present.
+        expr:
+          kind: path
+          path: [database_specific, severity]
+      - name: published
+        type: Timestamp
+        nullable: true
+        description: Publication timestamp (RFC3339).
+        expr:
+          kind: format_timestamp
+          input: iso8601
+          expr:
+            kind: path
+            path: [published]
+      - name: modified
+        type: Timestamp
+        nullable: true
+        description: Last modified timestamp (RFC3339).
+        expr:
+          kind: format_timestamp
+          input: iso8601
+          expr:
+            kind: path
+            path: [modified]
+      - name: aliases
+        type: Utf8
+        nullable: true
+        description: Alias identifiers (for example CVE or GHSA).
+        expr:
+          kind: join_array
+          path: [aliases]
+      - name: affected
+        type: Json
+        nullable: true
+        description: Affected package/range/version payload from OSV.
+        expr:
+          kind: path
+          path: [affected]
+      - name: fixed_version
+        type: Utf8
+        nullable: true
+        description: First fixed version when present in the affected ranges.
+        expr:
+          kind: path
+          path: [affected, "0", ranges, "0", events, "1", fixed]
+      - name: references
+        type: Json
+        nullable: true
+        description: Upstream reference URLs with reference types.
+        expr:
+          kind: path
+          path: [references]
+      - name: package_name
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Requested package name filter.
+        expr:
+          kind: from_filter
+          key: package_name
+      - name: ecosystem
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Requested ecosystem filter.
+        expr:
+          kind: from_filter
+          key: ecosystem
+      - name: version
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Optional requested version filter.
+        expr:
+          kind: from_filter
+          key: version

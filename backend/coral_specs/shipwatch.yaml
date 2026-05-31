@@ -1,0 +1,249 @@
+name: shipwatch
+version: 0.1.0
+dsl_version: 3
+backend: http
+description: >-
+  Query ShipWatch dependency scan results — risk scores, vulnerability counts,
+  OpenSSF Scorecard ratings, license data, and maintainer metrics for every
+  package in a scanned repository.
+base_url: http://localhost:8000
+request_headers:
+  - name: Accept
+    from: literal
+    value: application/json
+tables:
+  - name: scans
+    description: >-
+      One row per package in a completed ShipWatch scan.
+      Each row contains risk scores (0-10), vulnerability metadata,
+      OpenSSF Scorecard data, npm ecosystem metrics, and license information.
+      Requires scan_id as a filter (returned by POST /api/scan).
+    filters:
+      - name: scan_id
+        required: true
+        description: The scan ID returned when a scan was started (e.g. "55c2294a").
+    request:
+      method: GET
+      path: /api/results/{{filter.scan_id}}
+    response:
+      rows_path: [packages]
+      row_strategy: direct
+    columns:
+      - name: scan_id
+        type: Utf8
+        nullable: false
+        virtual: true
+        description: The ShipWatch scan identifier (from the filter).
+        expr:
+          kind: from_filter
+          key: scan_id
+
+      - name: name
+        type: Utf8
+        nullable: false
+        description: npm package name.
+        expr:
+          kind: path
+          path: [name]
+
+      - name: version
+        type: Utf8
+        nullable: true
+        description: Package version as declared in package.json.
+        expr:
+          kind: path
+          path: [version]
+
+      - name: risk_level
+        type: Utf8
+        nullable: false
+        description: Composite risk level — "critical", "warning", or "healthy".
+        expr:
+          kind: path
+          path: [risk_level]
+
+      - name: risk_score
+        type: Float64
+        nullable: false
+        description: >-
+          Composite risk score from 0.0 (safe) to 10.0 (critical).
+          Weighted: 40% security + 35% maintenance + 25% ecosystem.
+        expr:
+          kind: path
+          path: [risk_score]
+
+      - name: confidence
+        type: Utf8
+        nullable: true
+        description: Data confidence level — "high", "medium", or "low".
+        expr:
+          kind: path
+          path: [confidence]
+
+      - name: vuln_count
+        type: Int64
+        nullable: true
+        description: Total number of known vulnerabilities (from OSV).
+        expr:
+          kind: path
+          path: [vuln_count]
+
+      - name: highest_severity
+        type: Utf8
+        nullable: true
+        description: Highest CVE severity — CRITICAL, HIGH, MEDIUM, or LOW.
+        expr:
+          kind: path
+          path: [highest_severity]
+
+      - name: license
+        type: Utf8
+        nullable: true
+        description: SPDX license identifier (e.g. "MIT", "GPL-3.0").
+        expr:
+          kind: path
+          path: [license]
+
+      - name: weekly_downloads
+        type: Int64
+        nullable: true
+        description: Weekly npm download count (proxy for ecosystem health).
+        expr:
+          kind: path
+          path: [weekly_downloads]
+
+      - name: stars
+        type: Int64
+        nullable: true
+        description: GitHub star count for the package's source repository.
+        expr:
+          kind: path
+          path: [stars]
+
+      - name: last_commit
+        type: Utf8
+        nullable: true
+        description: ISO 8601 timestamp of the most recent commit to the repository.
+        expr:
+          kind: path
+          path: [last_commit]
+
+      - name: contributors_count
+        type: Int64
+        nullable: true
+        description: Number of unique contributors to the repository.
+        expr:
+          kind: path
+          path: [contributors_count]
+
+      - name: scorecard_score
+        type: Float64
+        nullable: true
+        description: >-
+          OpenSSF Scorecard score (0-10, where 10 = most secure).
+          NULL when the package's repo is not indexed by Scorecard API.
+        expr:
+          kind: path
+          path: [scorecard_score]
+
+      - name: deprecated
+        type: Boolean
+        nullable: true
+        description: True if the package is marked deprecated on npm.
+        expr:
+          kind: path
+          path: [deprecated]
+
+      - name: maintainers_count
+        type: Int64
+        nullable: true
+        description: Number of npm maintainers (bus-factor risk).
+        expr:
+          kind: path
+          path: [maintainers_count]
+
+      - name: github_repo
+        type: Utf8
+        nullable: true
+        description: GitHub owner/repo slug (e.g. "expressjs/express").
+        expr:
+          kind: path
+          path: [github_repo]
+
+      - name: dep_type
+        type: Utf8
+        nullable: true
+        description: Dependency type from package.json (production or dev).
+        expr:
+          kind: path
+          path: [dep_type]
+
+      - name: epss_max_score
+        type: Float64
+        nullable: true
+        description: Max EPSS exploitation probability across all CVEs.
+        expr:
+          kind: path
+          path: [epss_max_score]
+
+      - name: in_kev
+        type: Boolean
+        nullable: true
+        description: True if any vulnerability is in the CISA KEV catalog.
+        expr:
+          kind: path
+          path: [in_kev]
+
+      - name: kev_ransomware
+        type: Boolean
+        nullable: true
+        description: True if any KEV entry is linked to ransomware campaigns.
+        expr:
+          kind: path
+          path: [kev_ransomware]
+
+      - name: decision_action
+        type: Utf8
+        nullable: true
+        description: Decision intelligence output (fix_now, watch, ignore).
+        expr:
+          kind: path
+          path: [decision, action]
+
+      - name: decision_confidence
+        type: Utf8
+        nullable: true
+        description: Decision confidence level (high, medium, low).
+        expr:
+          kind: path
+          path: [decision, confidence]
+
+      - name: security_risk
+        type: Float64
+        nullable: true
+        description: Security dimension score (0-10), based on CVSS and vulnerability count.
+        expr:
+          kind: path
+          path: [security_risk]
+
+      - name: maintenance_risk
+        type: Float64
+        nullable: true
+        description: Maintenance dimension score (0-10), based on OpenSSF Scorecard and commit recency.
+        expr:
+          kind: path
+          path: [maintenance_risk]
+
+      - name: ecosystem_risk
+        type: Float64
+        nullable: true
+        description: Ecosystem dimension score (0-10), based on download volume, license, and maintainers.
+        expr:
+          kind: path
+          path: [ecosystem_risk]
+
+test_queries:
+  - "SELECT name, version, risk_level, risk_score FROM shipwatch.scans WHERE scan_id = '55185b17' ORDER BY risk_score DESC LIMIT 10"
+  - "SELECT name, vuln_count, highest_severity, security_risk FROM shipwatch.scans WHERE scan_id = '55185b17' AND vuln_count > 0"
+  - "SELECT risk_level, COUNT(*) AS pkg_count, ROUND(AVG(risk_score), 2) AS avg_score FROM shipwatch.scans WHERE scan_id = '55185b17' GROUP BY risk_level"
+  - "SELECT name, decision_action, epss_max_score, in_kev FROM shipwatch.scans WHERE scan_id = '55185b17' AND decision_action = 'fix_now'"

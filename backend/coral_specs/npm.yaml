@@ -1,0 +1,91 @@
+name: npm
+version: 0.1.0
+dsl_version: 3
+backend: http
+description: >-
+  Query npm registry package metadata (latest version, license,
+  maintainers, repository URL, and related fields).
+base_url: https://registry.npmjs.org
+request_headers:
+  - name: Accept
+    from: literal
+    value: application/json
+test_queries:
+  - SELECT name, version, license FROM npm.packages WHERE name = 'express'
+tables:
+  - name: packages
+    description: npm package metadata for a single package name.
+    filters:
+      - name: name
+        required: true
+    request:
+      method: GET
+      path: /{{filter.name}}
+    response: {}
+    columns:
+      - name: name
+        type: Utf8
+        nullable: false
+        description: Package name.
+        expr:
+          kind: path
+          path: [name]
+      - name: description
+        type: Utf8
+        nullable: true
+        description: Package description.
+        expr:
+          kind: path
+          path: [description]
+      - name: version
+        type: Utf8
+        nullable: true
+        description: Latest published version.
+        expr:
+          kind: path
+          path: [dist-tags, latest]
+      - name: license
+        type: Utf8
+        nullable: true
+        description: Package license (MIT, Apache-2.0, etc.).
+        expr:
+          kind: path
+          path: [license]
+      - name: homepage
+        type: Utf8
+        nullable: true
+        description: Package homepage URL.
+        expr:
+          kind: path
+          path: [homepage]
+      - name: repository_url
+        type: Utf8
+        nullable: true
+        description: Source repository URL.
+        expr:
+          kind: path
+          path: [repository, url]
+      - name: maintainers
+        type: Json
+        nullable: true
+        description: Raw maintainers array from npm.
+        expr:
+          kind: path
+          path: [maintainers]
+      - name: last_publish
+        type: Utf8
+        nullable: true
+        description: Date of the latest publish.
+        expr:
+          kind: path
+          path: [time, modified]
+      - name: deprecated
+        type: Boolean
+        nullable: true
+        description: Whether the package is deprecated (when present).
+        expr:
+          kind: if_present
+          check:
+            kind: path
+            path: [deprecated]
+          then_value: "true"
